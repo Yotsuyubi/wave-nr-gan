@@ -121,7 +121,7 @@ class GAN(pl.LightningModule):
         real = batch.float()
 
         # train Disc
-        if optimizer_idx == 0:
+        if optimizer_idx < 3:
 
             for p in self.D.parameters():  # reset requires_grad
                 p.requires_grad = True  # they are set to False below in netG update
@@ -147,7 +147,7 @@ class GAN(pl.LightningModule):
             return { "loss": D_cost, "progress_bar": { "W_dis": D_real - D_fake } }
 
         # train Gen
-        if optimizer_idx == 1:
+        if optimizer_idx == 3:
 
             for p in self.D.parameters():
                 p.requires_grad = False  # to avoid computation
@@ -200,7 +200,7 @@ class GAN(pl.LightningModule):
         G_params = list(self.SigG.parameters()) + list(self.NoiseG.parameters())
         opt_g = torch.optim.Adam(G_params, lr=1e-4)
         opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-3)
-        return [opt_d, opt_g], []
+        return [opt_d, opt_d, opt_d, opt_g], []
 
     def train_dataloader(self):
         return DataLoader(
