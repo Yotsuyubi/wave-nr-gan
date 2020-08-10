@@ -163,8 +163,16 @@ class GAN(pl.LightningModule):
                 fake_signal = fake_signal.clone().detach()
             fake = fake_signal + noise
             C_fake = self.D(fake).mean()
+            C_fake_signal = self.D(fake_signal).mean()
 
-            C_cost = -C_fake
+            # train with ds reg
+            z_n1 = torch.rand([real.size()[0], 1]).to(self.dev)
+            z_n2 = torch.rand([real.size()[0], 1]).to(self.dev)
+            noise_sigma_1 = self.NoiseG(z_g, z_n1)
+            noise_sigma_2 = self.NoiseG(z_g, z_n2)
+            ds_reg = torch.min([(noise_sigma_2 - noise_sigma_1).mean() / (z_n2 - z_n1).mean(), 0]).to(self.dev)
+
+            C_cost = -C_fake + ds_reg*0.01
 
             if batch_nb == 0:
                 self.plot()
