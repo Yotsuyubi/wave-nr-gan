@@ -27,9 +27,10 @@ class ResBlock(nn.Module):
 
 class Discriminator(nn.Module):
 
-    def __init__(self, dim):
+    def __init__(self, dim, length):
         super().__init__()
         self.dim = dim
+        self.length = length
         self.conv = nn.Conv1d(1, self.dim, 1)
         self.block = nn.Sequential(
             ResBlock(self.dim),
@@ -38,12 +39,11 @@ class Discriminator(nn.Module):
             ResBlock(self.dim),
             ResBlock(self.dim),
         )
-        self.fc = nn.Linear(self.dim, 1)
+        self.fc = nn.Linear(self.dim*self.length, 1)
 
     def forward(self, x):
         x = self.conv(x)
         x = self.block(x)
-        x = nn.AdaptiveAvgPool1d([1])(x)
         x = nn.Flatten()(x)
         return self.fc(x)
 
@@ -103,7 +103,7 @@ class GAN(pl.LightningModule):
     def __init__(self, device='cpu'):
         super().__init__()
         self.length = 64
-        self.D = Discriminator(256)
+        self.D = Discriminator(256, self.length)
         self.SigG = SignalGenerator(256, self.length)
         self.NoiseG = NoiseGenerator(256, self.length)
         self.dev = device
@@ -201,6 +201,6 @@ class GAN(pl.LightningModule):
 
     def train_dataloader(self):
         return DataLoader(
-            SignalWithNoise(self.length),
-            batch_size=8,
+            SignalWithNoise(self.length, length=1024),
+            batch_size=128,
         )

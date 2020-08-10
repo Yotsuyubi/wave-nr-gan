@@ -8,8 +8,9 @@ import numpy as np
 
 if __name__ == '__main__':
     gpus = 1 if torch.cuda.is_available() else 0
+    device = 'cuda:01' if torch.cuda.is_available() else 'cpu'
 
-    model = GAN(device='cpu')
+    model = GAN(device=device)
     trainer = pl.Trainer(
         gpus=gpus,
         progress_bar_refresh_rate=20,
