@@ -14,9 +14,9 @@ class ResBlock(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.res_block = nn.Sequential(
-            nn.ReLU(True),
+            nn.LeakyReLU(),
             nn.Conv1d(dim, dim, 5, padding=2),
-            nn.ReLU(True),
+            nn.LeakyReLU(),
             nn.Conv1d(dim, dim, 5, padding=2),
         )
 
@@ -77,7 +77,7 @@ class NoiseGenerator(nn.Module):
         super().__init__()
         self.dim = dim
         self.length = length
-        self.fc = nn.Linear(1, self.length)
+        self.fc = nn.Linear(2, self.length)
         self.conv = nn.Conv1d(1, self.dim, 1)
         self.block = nn.Sequential(
             ResBlock(self.dim),
@@ -88,8 +88,9 @@ class NoiseGenerator(nn.Module):
         )
         self.sigma = nn.Linear(self.dim, 1)
 
-    def forward(self, noise):
-        x = self.fc(noise)
+    def forward(self, noise, g_latent):
+        x = torch.cat([noise, g_latent], axis=1)
+        x = self.fc(x)
         x = x.reshape(-1, 1, self.length)
         x = self.conv(x)
         x = self.block(x)
@@ -129,9 +130,10 @@ class GAN(pl.LightningModule):
             D_real = self.D(real).mean()
 
             # train with fake
-            z = torch.rand([real.size()[0], 1]).to(self.dev)
-            fake_signal = self.SigG(z)
-            noise_sigma = self.NoiseG(z)
+            z_g = torch.rand([real.size()[0], 1]).to(self.dev)
+            z_n = torch.rand([real.size()[0], 1]).to(self.dev)
+            fake_signal = self.SigG(z_g)
+            noise_sigma = self.NoiseG(z_g, z_n)
             noise_mu = torch.randn([1, self.length]).to(self.dev)
             noise = (noise_sigma * noise_mu).reshape([real.size()[0], 1, -1])
             fake = fake_signal + noise
@@ -151,12 +153,13 @@ class GAN(pl.LightningModule):
                 p.requires_grad = False  # to avoid computation
 
             # train with converted(fake)
-            z = torch.rand([real.size()[0], 1]).to(self.dev)
-            fake_signal = self.SigG(z)
-            noise_sigma = self.NoiseG(z)
+            z_g = torch.rand([real.size()[0], 1]).to(self.dev)
+            z_n = torch.rand([real.size()[0], 1]).to(self.dev)
+            fake_signal = self.SigG(z_g)
+            noise_sigma = self.NoiseG(z_g, z_n)
             noise_mu = torch.randn([1, self.length]).to(self.dev)
             noise = (noise_sigma * noise_mu).reshape([real.size()[0], 1, -1])
-            if torch.randn([1]).item() < 0.5:
+            if torch.randn([1]).item() < 0.8:
                 fake_signal = fake_signal.clone().detach()
             fake = fake_signal + noise
             C_fake = self.D(fake).mean()
