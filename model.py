@@ -36,8 +36,8 @@ class Discriminator(nn.Module):
             ResBlock(self.dim),
             ResBlock(self.dim),
             ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
+            # ResBlock(self.dim),
+            # ResBlock(self.dim),
         )
         self.fc = nn.Linear(self.dim*self.length, 1)
 
@@ -59,8 +59,8 @@ class SignalGenerator(nn.Module):
             ResBlock(self.dim),
             ResBlock(self.dim),
             ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
+            # ResBlock(self.dim),
+            # ResBlock(self.dim),
         )
         self.out = nn.Conv1d(self.dim, 1, 1)
 
@@ -83,8 +83,8 @@ class NoiseGenerator(nn.Module):
             ResBlock(self.dim),
             ResBlock(self.dim),
             ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
+            # ResBlock(self.dim),
+            # ResBlock(self.dim),
         )
         self.sigma = nn.Linear(self.dim, 1)
 
@@ -170,7 +170,7 @@ class GAN(pl.LightningModule):
 
     def plot(self):
         signal = self()
-        plt.plot(signal.clone().detach().numpy()[0][0])
+        plt.plot(signal.cpu().clone().detach().numpy()[0][0])
         plt.savefig('./figure.png')
         plt.close()
 
