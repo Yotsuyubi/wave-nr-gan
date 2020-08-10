@@ -13,7 +13,6 @@ if __name__ == '__main__':
     model = GAN(device=device)
     trainer = pl.Trainer(
         gpus=gpus,
-        progress_bar_refresh_rate=20,
         max_epochs=1000,
         # auto_lr_find=True
     )
