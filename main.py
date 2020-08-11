@@ -17,11 +17,3 @@ if __name__ == '__main__':
         # auto_lr_find=True
     )
     trainer.fit(model)
-
-
-    # noise = torch.randn([1, 4096])*torch.randn([1, 1])
-    # t = np.arange(0, 4096, 1)*0.001
-    # signal = torch.randn([1, 1])+torch.randn([1, 1])*np.sin(2*np.pi*1*t+torch.randn([1, 1]).numpy())
-    # signal = signal.reshape([1, -1])
-    # plt.plot(signal.cpu().clone().detach().numpy()[0])
-    # plt.savefig('./figure.png')

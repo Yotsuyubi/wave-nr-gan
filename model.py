@@ -76,6 +76,26 @@ class SignalGenerator(nn.Module):
         x = self.block(x)
         return nn.Tanh()(x)
 
+class SpikeGenerator(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.fc = nn.Linear(200, 256*16)
+        self.block = nn.Sequential(
+            Block(16*16, 8*16),       # 64
+            Block(8*16, 4*16),        # 256
+            Block(4*16, 2*16),        # 1024
+            Block(2*16, 1*16),        # 4096
+            nn.Conv1d(1*16, 1, 1)  # 4096
+        )
+
+    def forward(self, noise, g_latent):
+        x = torch.cat([noise, g_latent], axis=1)
+        x = self.fc(x)
+        x = x.reshape(-1, 16*16, 16)
+        x = self.block(x)
+        return nn.Tanh()(x)
+
 class NoiseGenerator(nn.Module):
 
     def __init__(self):
@@ -104,6 +124,7 @@ class GAN(pl.LightningModule):
         self.latent_length = 100
         self.D = Discriminator()
         self.SigG = SignalGenerator()
+        self.SpikeG = SpikeGenerator()
         self.NoiseG = NoiseGenerator()
         self.dev = device
 
@@ -126,7 +147,7 @@ class GAN(pl.LightningModule):
         real = batch.float()
 
         # train Disc
-        if optimizer_idx < 3:
+        if optimizer_idx < 5:
 
             for p in self.D.parameters():  # reset requires_grad
                 p.requires_grad = True  # they are set to False below in netG update
@@ -137,11 +158,16 @@ class GAN(pl.LightningModule):
             # train with fake
             z_g = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             z_n = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
+            z_s = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             fake_signal = self.SigG(z_g)
             noise_sigma = self.NoiseG(z_g, z_n)
+            fake_spike = self.SpikeG(z_g, z_n)
             noise_mu = torch.randn([1, self.length]).to(self.dev)
             noise = (noise_sigma * noise_mu).reshape([real.size()[0], 1, -1])
-            fake = fake_signal + noise
+            if torch.rand([1]) < 0.8:
+                fake = fake_signal + noise
+            else:
+                fake = fake_signal + noise + fake_spike
             D_fake = self.D(fake).mean()
 
             # train with gradient penalty
@@ -152,7 +178,7 @@ class GAN(pl.LightningModule):
             return { "loss": D_cost, "progress_bar": { "W_dis": D_real - D_fake } }
 
         # train Gen
-        if optimizer_idx == 3:
+        if optimizer_idx == 5:
 
             for p in self.D.parameters():
                 p.requires_grad = False  # to avoid computation
@@ -160,11 +186,16 @@ class GAN(pl.LightningModule):
             # train with converted(fake)
             z_g = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             z_n = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
+            z_s = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             fake_signal = self.SigG(z_g)
             noise_sigma = self.NoiseG(z_g, z_n)
+            fake_spike = self.SpikeG(z_g, z_n)
             noise_mu = torch.randn([1, self.length]).to(self.dev)
             noise = (noise_sigma * noise_mu).reshape([real.size()[0], 1, -1])
-            fake = fake_signal + noise
+            if torch.rand([1]) < 0.8:
+                fake = fake_signal + noise
+            else:
+                fake = fake_signal + noise + fake_spike
             C_fake = self.D(fake).mean()
 
             # train with ds reg
@@ -174,7 +205,7 @@ class GAN(pl.LightningModule):
             noise_sigma_2 = self.NoiseG(z_g, z_n2)
             ds_reg = torch.min(torch.tensor([(noise_sigma_2 - noise_sigma_1).mean() / (z_n2 - z_n1).mean(), 0])).to(self.dev)
 
-            C_cost = -C_fake
+            C_cost = -C_fake + ds_reg*0.02
 
             if batch_nb == 0:
                 self.plot()
@@ -210,7 +241,7 @@ class GAN(pl.LightningModule):
         G_params = list(self.SigG.parameters()) + list(self.NoiseG.parameters())
         opt_g = torch.optim.Adam(G_params, lr=1e-3)
         opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-3)
-        return [opt_d, opt_d, opt_d, opt_g], []
+        return [opt_d, opt_d, opt_d, opt_d, opt_d, opt_g], []
 
     def train_dataloader(self):
         return DataLoader(
