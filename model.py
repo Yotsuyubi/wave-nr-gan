@@ -30,7 +30,7 @@ class PhaseShift(nn.Module):
 
     def forward(self, x):
         n = torch.randint(-self.n, self.n, (1,))
-        return torch.roll(x, shifts=n.item())
+        return torch.roll(x, shifts=n.item(), dims=2)
 
 
 class Discriminator(nn.Module):
