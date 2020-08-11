@@ -239,8 +239,8 @@ class GAN(pl.LightningModule):
 
     def configure_optimizers(self):
         G_params = list(self.SigG.parameters()) + list(self.NoiseG.parameters())
-        opt_g = torch.optim.Adam(G_params, lr=1e-3)
-        opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-3)
+        opt_g = torch.optim.Adam(G_params, lr=1e-4)
+        opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-4)
         return [opt_d, opt_d, opt_d, opt_d, opt_d, opt_g], []
 
     def train_dataloader(self):
