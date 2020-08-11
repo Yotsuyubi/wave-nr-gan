@@ -22,6 +22,16 @@ class Block(nn.Module):
         output = self.block(input)
         return output
 
+class PhaseShift(nn.Module):
+
+    def __init__(self, n):
+        super().__init__()
+        self.n = n
+
+    def forward(self, x):
+        n = torch.randint(-self.n, self.n, (1,))
+        return torch.roll(x, shifts=n.item())
+
 
 class Discriminator(nn.Module):
 
@@ -30,10 +40,13 @@ class Discriminator(nn.Module):
         self.block = nn.Sequential(
             nn.Conv1d(1, 2*16, 26, padding=11, stride=4), # 1024
             nn.LeakyReLU(0.2),
+            PhaseShift(2),
             nn.Conv1d(2*16, 4*16, 26, padding=11, stride=4), # 256
             nn.LeakyReLU(0.2),
+            PhaseShift(2),
             nn.Conv1d(4*16, 8*16, 26, padding=11, stride=4), # 64
             nn.LeakyReLU(0.2),
+            PhaseShift(2),
             nn.Conv1d(8*16, 16*16, 26, padding=11, stride=4), # 16
             nn.LeakyReLU(0.2),
         )
