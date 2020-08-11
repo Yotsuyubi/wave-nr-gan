@@ -9,112 +9,104 @@ import matplotlib.pyplot as plt
 
 
 
-class ResBlock(nn.Module):
+class Block(nn.Module):
 
-    def __init__(self, dim):
+    def __init__(self, in_dim, out_dim):
         super().__init__()
-        self.res_block = nn.Sequential(
-            nn.LeakyReLU(),
-            nn.Conv1d(dim, dim, 5, padding=2),
-            nn.LeakyReLU(),
-            nn.Conv1d(dim, dim, 5, padding=2),
+        self.block = nn.Sequential(
+            nn.LeakyReLU(0.2),
+            nn.ConvTranspose1d(in_dim, out_dim, 25, padding=11, stride=4, output_padding=1),
         )
 
     def forward(self, input):
-        output = self.res_block(input)
-        return input + (0.3 * output)
+        output = self.block(input)
+        return output
 
 
 class Discriminator(nn.Module):
 
-    def __init__(self, dim, length):
+    def __init__(self):
         super().__init__()
-        self.dim = dim
-        self.length = length
-        self.conv = nn.Conv1d(1, self.dim, 1)
         self.block = nn.Sequential(
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
+            nn.Conv1d(1, 2*16, 26, padding=11, stride=4), # 1024
+            nn.LeakyReLU(0.2),
+            nn.Conv1d(2*16, 4*16, 26, padding=11, stride=4), # 256
+            nn.LeakyReLU(0.2),
+            nn.Conv1d(4*16, 8*16, 26, padding=11, stride=4), # 64
+            nn.LeakyReLU(0.2),
+            nn.Conv1d(8*16, 16*16, 26, padding=11, stride=4), # 16
+            nn.LeakyReLU(0.2),
         )
-        self.fc = nn.Linear(self.dim*self.length, 1)
+        self.fc = nn.Linear(256*16, 1)
 
     def forward(self, x):
-        x = self.conv(x)
         x = self.block(x)
         x = nn.Flatten()(x)
         return self.fc(x)
 
 class SignalGenerator(nn.Module):
 
-    def __init__(self, dim, length):
+    def __init__(self):
         super().__init__()
-        self.dim = dim
-        self.length = length
-        self.fc = nn.Linear(1, self.length)
-        self.conv = nn.Conv1d(1, self.dim, 1)
+        self.fc = nn.Linear(100, 256*16)
         self.block = nn.Sequential(
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
+            Block(16*16, 8*16),       # 64
+            Block(8*16, 4*16),        # 256
+            Block(4*16, 2*16),        # 1024
+            Block(2*16, 1*16),        # 4096
+            nn.Conv1d(1*16, 1, 1)  # 4096
         )
-        self.out = nn.Conv1d(self.dim, 1, 1)
 
     def forward(self, noise):
         x = self.fc(noise)
-        x = x.reshape(-1, 1, self.length)
-        x = self.conv(x)
+        x = x.reshape(-1, 16*16, 16)
         x = self.block(x)
-        return self.out(x)
+        return nn.Tanh()(x)
 
 class NoiseGenerator(nn.Module):
 
-    def __init__(self, dim, length):
+    def __init__(self):
         super().__init__()
-        self.dim = dim
-        self.length = length
-        self.fc = nn.Linear(2, self.length)
-        self.conv = nn.Conv1d(1, self.dim, 1)
-        self.block = nn.Sequential(
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
-            ResBlock(self.dim),
+        self.fc = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(200, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
         )
-        self.sigma = nn.Linear(self.dim, 1)
 
     def forward(self, noise, g_latent):
         x = torch.cat([noise, g_latent], axis=1)
-        x = self.fc(x)
-        x = x.reshape(-1, 1, self.length)
-        x = self.conv(x)
-        x = self.block(x)
-        x = nn.AdaptiveAvgPool1d([1])(x)
         x = nn.Flatten()(x)
-        return self.sigma(x)
+        x = self.fc(x)
+        return x
 
 
 class GAN(pl.LightningModule):
 
     def __init__(self, device='cpu'):
         super().__init__()
-        self.length = 64
-        self.D = Discriminator(256, self.length)
-        self.SigG = SignalGenerator(256, self.length)
-        self.NoiseG = NoiseGenerator(256, self.length)
+        self.length = 4096
+        self.latent_length = 100
+        self.D = Discriminator()
+        self.SigG = SignalGenerator()
+        self.NoiseG = NoiseGenerator()
         self.dev = device
 
     def forward(self, x=None):
         if x is not None:
             return self.SigG(x)
         else:
-            z = torch.rand([1, 1]).to(self.dev)
+            z = torch.rand([1, self.latent_length]).to(self.dev)
             return self.SigG(z)
+
+    def noise(self, x=None, latent=None):
+        if x is None:
+            x = torch.rand([1, self.latent_length]).to(self.dev)
+        if latent is None:
+            latent = torch.rand([1, self.latent_length]).to(self.dev)
+        return self.NoiseG(x, latent)
 
     def training_step(self, batch, batch_nb, optimizer_idx):
 
@@ -130,8 +122,8 @@ class GAN(pl.LightningModule):
             D_real = self.D(real).mean()
 
             # train with fake
-            z_g = torch.rand([real.size()[0], 1]).to(self.dev)
-            z_n = torch.rand([real.size()[0], 1]).to(self.dev)
+            z_g = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
+            z_n = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             fake_signal = self.SigG(z_g)
             noise_sigma = self.NoiseG(z_g, z_n)
             noise_mu = torch.randn([1, self.length]).to(self.dev)
@@ -153,26 +145,23 @@ class GAN(pl.LightningModule):
                 p.requires_grad = False  # to avoid computation
 
             # train with converted(fake)
-            z_g = torch.rand([real.size()[0], 1]).to(self.dev)
-            z_n = torch.rand([real.size()[0], 1]).to(self.dev)
+            z_g = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
+            z_n = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             fake_signal = self.SigG(z_g)
             noise_sigma = self.NoiseG(z_g, z_n)
             noise_mu = torch.randn([1, self.length]).to(self.dev)
             noise = (noise_sigma * noise_mu).reshape([real.size()[0], 1, -1])
-            if torch.randn([1]).item() < 0.8:
-                fake_signal = fake_signal.clone().detach()
             fake = fake_signal + noise
             C_fake = self.D(fake).mean()
-            C_fake_signal = self.D(fake_signal).mean()
 
             # train with ds reg
-            z_n1 = torch.rand([real.size()[0], 1]).to(self.dev)
-            z_n2 = torch.rand([real.size()[0], 1]).to(self.dev)
+            z_n1 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
+            z_n2 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             noise_sigma_1 = self.NoiseG(z_g, z_n1)
             noise_sigma_2 = self.NoiseG(z_g, z_n2)
             ds_reg = torch.min(torch.tensor([(noise_sigma_2 - noise_sigma_1).mean() / (z_n2 - z_n1).mean(), 0])).to(self.dev)
 
-            C_cost = -C_fake + ds_reg*0.01
+            C_cost = -C_fake
 
             if batch_nb == 0:
                 self.plot()
@@ -206,7 +195,7 @@ class GAN(pl.LightningModule):
 
     def configure_optimizers(self):
         G_params = list(self.SigG.parameters()) + list(self.NoiseG.parameters())
-        opt_g = torch.optim.Adam(G_params, lr=1e-4)
+        opt_g = torch.optim.Adam(G_params, lr=1e-3)
         opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-3)
         return [opt_d, opt_d, opt_d, opt_g], []
 
