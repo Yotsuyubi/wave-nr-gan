@@ -33,6 +33,31 @@ class PhaseShift(nn.Module):
         return torch.roll(x, shifts=n.item(), dims=2)
 
 
+class LatentExt(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv1d(1, 2*16, 26, padding=11, stride=4), # 1024
+            nn.LeakyReLU(0.2),
+            nn.Conv1d(2*16, 4*16, 26, padding=11, stride=4), # 256
+            nn.LeakyReLU(0.2),
+            nn.Conv1d(4*16, 8*16, 26, padding=11, stride=4), # 64
+            nn.LeakyReLU(0.2),
+            nn.Conv1d(8*16, 16*16, 26, padding=11, stride=4), # 16
+            nn.LeakyReLU(0.2),
+        )
+        self.fc_zx = nn.Linear(256*16, 100)
+        self.fc_zn = nn.Linear(256*16, 100)
+
+    def forward(self, x):
+        x = self.block(x)
+        x = nn.Flatten()(x)
+        zx = self.fc_zx(x)
+        zn = self.fc_zn(x)
+        return zx, zn
+
+
 class Discriminator(nn.Module):
 
     def __init__(self):
@@ -105,14 +130,12 @@ class GAN(pl.LightningModule):
         self.D = Discriminator()
         self.SigG = SignalGenerator()
         self.NoiseG = NoiseGenerator()
+        self.LatentExt = LatentExt()
         self.dev = device
 
-    def forward(self, x=None):
-        if x is not None:
-            return self.SigG(x)
-        else:
-            z = torch.rand([1, self.latent_length]).to(self.dev)
-            return self.SigG(z)
+    def forward(self, x):
+        zx, _ = self.LatentExt(x)
+        return self.SigG(zx)
 
     def noise(self, x=None, latent=None):
         if x is None:
@@ -126,7 +149,7 @@ class GAN(pl.LightningModule):
         real = batch.float()
 
         # train Disc
-        if optimizer_idx < 3:
+        if optimizer_idx < 5:
 
             for p in self.D.parameters():  # reset requires_grad
                 p.requires_grad = True  # they are set to False below in netG update
@@ -135,8 +158,7 @@ class GAN(pl.LightningModule):
             D_real = self.D(real).mean()
 
             # train with fake
-            z_g = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
-            z_n = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
+            z_g, z_n = self.LatentExt(real)
             fake_signal = self.SigG(z_g)
             noise_sigma = self.NoiseG(z_g, z_n)
             noise_mu = torch.randn([1, self.length]).to(self.dev)
@@ -152,14 +174,13 @@ class GAN(pl.LightningModule):
             return { "loss": D_cost, "progress_bar": { "W_dis": D_real - D_fake } }
 
         # train Gen
-        if optimizer_idx == 3:
+        if optimizer_idx == 5:
 
             for p in self.D.parameters():
                 p.requires_grad = False  # to avoid computation
 
             # train with converted(fake)
-            z_g = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
-            z_n = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
+            z_g, z_n = self.LatentExt(real)
             fake_signal = self.SigG(z_g)
             noise_sigma = self.NoiseG(z_g, z_n)
             noise_mu = torch.randn([1, self.length]).to(self.dev)
@@ -174,7 +195,7 @@ class GAN(pl.LightningModule):
             noise_sigma_2 = self.NoiseG(z_g, z_n2)
             ds_reg = torch.min(torch.tensor([(noise_sigma_2 - noise_sigma_1).mean() / (z_n2 - z_n1).mean(), 0])).to(self.dev)
 
-            C_cost = -C_fake
+            C_cost = -C_fake + 0.02*ds_reg + nn.MSELoss()(fake, real)
 
             if batch_nb == 0:
                 self.plot()
@@ -182,7 +203,11 @@ class GAN(pl.LightningModule):
             return { "loss": C_cost }
 
     def plot(self):
-        signal = self()
+        noise = torch.randn([1, self.length])*torch.randn([1, 1])
+        t = np.arange(0, self.length, 1)*0.001
+        signal = torch.randn([1, 1])+torch.randn([1, 1])*np.sin(2*np.pi*1*t+torch.randn([1, 1]).numpy())
+        signal = signal.reshape([1, 1, -1])
+        signal = self((signal+noise).float())
         plt.plot(signal.cpu().clone().detach().numpy()[0][0])
         plt.savefig('./figure.png')
         plt.close()
@@ -207,10 +232,10 @@ class GAN(pl.LightningModule):
         return gradient_penalty
 
     def configure_optimizers(self):
-        G_params = list(self.SigG.parameters()) + list(self.NoiseG.parameters())
-        opt_g = torch.optim.Adam(G_params, lr=1e-3)
-        opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-3)
-        return [opt_d, opt_d, opt_d, opt_g], []
+        G_params = list(self.SigG.parameters()) + list(self.NoiseG.parameters()) + list(self.LatentExt.parameters())
+        opt_g = torch.optim.Adam(G_params, lr=1e-4)
+        opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-4)
+        return [opt_d, opt_d, opt_d, opt_d, opt_d, opt_g], []
 
     def train_dataloader(self):
         return DataLoader(
