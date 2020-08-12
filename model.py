@@ -191,9 +191,7 @@ class GAN(pl.LightningModule):
             # train with ds reg
             z_n1 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             z_n2 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
-            noise_sigma_1 = self.NoiseG(z_g, z_n1)
-            noise_sigma_2 = self.NoiseG(z_g, z_n2)
-            ds_reg = torch.min(torch.tensor([torch.abs(noise_sigma_2 - noise_sigma_1).mean() / torch.abs(z_n2 - z_n1).mean(), 0])).to(self.dev)
+            ds_reg = self.calc_diversity_sensitivity_loss(self.NoiseG, z_n1, z_n2)
 
             C_cost = -C_fake -0.02*ds_reg +0.5*nn.MSELoss()(fake, real)
 
@@ -230,6 +228,9 @@ class GAN(pl.LightningModule):
 
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * 10
         return gradient_penalty
+
+    def calc_diversity_sensitivity_loss(self, G, z1, z2, tau=0):
+        return torch.min(torch.tensor([torch.abs(G(z2) - G(z1)).mean() / torch.abs(z2 - z1).mean(), tau])).to(self.dev)
 
     def configure_optimizers(self):
         G_params = list(self.SigG.parameters()) + list(self.NoiseG.parameters()) + list(self.LatentExt.parameters())
