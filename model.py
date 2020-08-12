@@ -203,11 +203,11 @@ class GAN(pl.LightningModule):
             return { "loss": C_cost }
 
     def plot(self):
-        noise = torch.randn([1, self.length])*torch.randn([1, 1])
-        t = np.arange(0, self.length, 1)*0.001
-        signal = torch.randn([1, 1])+torch.randn([1, 1])*np.sin(2*np.pi*1*t+torch.randn([1, 1]).numpy())
-        signal = signal.reshape([1, 1, -1])
-        signal = self((signal+noise).float())
+        noise = (torch.randn([1, self.length])*torch.randn([1, 1])).to(self.dev)
+        t = torch.arange(0, self.length, 1)*0.001
+        signal = (torch.randn([1, 1])+torch.randn([1, 1])*torch.sin(2*np.pi*1*t+torch.randn([1, 1]))).to(self.dev)
+        signal = signal.reshape([1, 1, -1]).to(self.dev)
+        signal = self(signal+noise)
         plt.plot(signal.cpu().clone().detach().numpy()[0][0])
         plt.savefig('./figure.png')
         plt.close()
