@@ -126,7 +126,7 @@ class GAN(pl.LightningModule):
         real = batch.float()
 
         # train Disc
-        if optimizer_idx < 3:
+        if optimizer_idx < 5:
 
             for p in self.D.parameters():  # reset requires_grad
                 p.requires_grad = True  # they are set to False below in netG update
@@ -152,7 +152,7 @@ class GAN(pl.LightningModule):
             return { "loss": D_cost, "progress_bar": { "W_dis": D_real - D_fake } }
 
         # train Gen
-        if optimizer_idx == 3:
+        if optimizer_idx == 5:
 
             for p in self.D.parameters():
                 p.requires_grad = False  # to avoid computation
@@ -172,9 +172,9 @@ class GAN(pl.LightningModule):
             z_n2 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             noise_sigma_1 = self.NoiseG(z_g, z_n1)
             noise_sigma_2 = self.NoiseG(z_g, z_n2)
-            ds_reg = torch.min(torch.tensor([(noise_sigma_2 - noise_sigma_1).mean() / (z_n2 - z_n1).mean(), 0])).to(self.dev)
+            ds_reg = nn.L1Loss()(noise_sigma_2, noise_sigma_1)/nn.L1Loss()(z_n2, z_n1)
 
-            C_cost = -C_fake
+            C_cost = -C_fake -0.02*ds_reg
 
             if batch_nb == 0:
                 self.plot()
@@ -208,12 +208,12 @@ class GAN(pl.LightningModule):
 
     def configure_optimizers(self):
         G_params = list(self.SigG.parameters()) + list(self.NoiseG.parameters())
-        opt_g = torch.optim.Adam(G_params, lr=1e-3)
-        opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-3)
-        return [opt_d, opt_d, opt_d, opt_g], []
+        opt_g = torch.optim.Adam(G_params, lr=1e-4)
+        opt_d = torch.optim.Adam(self.D.parameters(), lr=1e-4)
+        return [opt_d, opt_d, opt_d, opt_d, opt_d, opt_g], []
 
     def train_dataloader(self):
         return DataLoader(
             SignalWithNoise(self.length, length=1024),
-            batch_size=128,
+            batch_size=64,
         )
