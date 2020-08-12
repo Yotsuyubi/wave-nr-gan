@@ -193,16 +193,16 @@ class GAN(pl.LightningModule):
             z_n2 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             noise_sigma_1 = self.NoiseG(z_g, z_n1)
             noise_sigma_2 = self.NoiseG(z_g, z_n2)
-            gn_ds_reg = torch.min(torch.tensor([nn.L1Loss()(noise_sigma_2, noise_sigma_1)/nn.L1Loss()(z_n2, z_n1), 0.]))
+            gn_ds_reg = nn.L1Loss()(noise_sigma_2, noise_sigma_1)/nn.L1Loss()(z_n2, z_n1)
 
             # train with Gx ds reg
             z_x1 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             z_x2 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             signal1 = self.SigG(z_x1)
             signal2 = self.SigG(z_x2)
-            gx_ds_reg = torch.min(torch.tensor([nn.L1Loss()(signal2, signal1)/nn.L1Loss()(z_x2, z_x1), 0.]))
+            gx_ds_reg = nn.L1Loss()(signal2, signal1)/nn.L1Loss()(z_x2, z_x1)
 
-            C_cost = -C_fake -0.02*gn_ds_reg -0.02*gx_ds_reg +nn.MSELoss()(fake, real)
+            C_cost = -C_fake -0.02*gn_ds_reg -0.02*gx_ds_reg +nn.MSELoss()(fake_signal, real)
 
             if batch_nb == 0:
                 self.plot()
