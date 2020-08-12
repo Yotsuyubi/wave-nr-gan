@@ -193,14 +193,14 @@ class GAN(pl.LightningModule):
             z_n2 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             noise_sigma_1 = self.NoiseG(z_g, z_n1)
             noise_sigma_2 = self.NoiseG(z_g, z_n2)
-            gn_ds_reg = torch.min(torch.tensor([torch.abs(noise_sigma_2 - noise_sigma_1).mean() / torch.abs(z_n2 - z_n1).mean(), 0])).to(self.dev)
+            gn_ds_reg = torch.min(torch.tensor([nn.L1Loss()(noise_sigma_2, noise_sigma_1)/nn.L1Loss()(z_n2, z_n1), 0.]))
 
             # train with Gx ds reg
             z_x1 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             z_x2 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             signal1 = self.SigG(z_x1)
             signal2 = self.SigG(z_x2)
-            gx_ds_reg = torch.min(torch.tensor([torch.abs(signal2 - signal1).mean() / torch.abs(z_x2 - z_x1).mean(), 0])).to(self.dev)
+            gx_ds_reg = torch.min(torch.tensor([nn.L1Loss()(signal2, signal1)/nn.L1Loss()(z_x2, z_x1), 0.]))
 
             C_cost = -C_fake -0.02*gn_ds_reg -0.02*gx_ds_reg +nn.MSELoss()(fake, real)
 
@@ -212,7 +212,7 @@ class GAN(pl.LightningModule):
     def plot(self):
         noise = (torch.randn([1, self.length])*torch.randn([1, 1])).to(self.dev)
         t = torch.arange(0, self.length, 1)*0.001
-        signal = (torch.randn([1, 1])+torch.randn([1, 1])*torch.sin(2*np.pi*1*t+torch.randn([1, 1]))).to(self.dev)
+        signal = torch.sin(2*np.pi*1*t).to(self.dev)
         signal = signal.reshape([1, 1, -1]).to(self.dev)
         signal = self(signal+noise)
         plt.plot(signal.cpu().clone().detach().numpy()[0][0])
@@ -247,5 +247,5 @@ class GAN(pl.LightningModule):
     def train_dataloader(self):
         return DataLoader(
             SignalWithNoise(self.length, length=1024),
-            batch_size=128,
+            batch_size=64,
         )
