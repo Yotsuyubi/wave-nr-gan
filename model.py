@@ -193,7 +193,7 @@ class GAN(pl.LightningModule):
             z_n2 = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             noise_sigma_1 = self.NoiseG(z_g, z_n1)
             noise_sigma_2 = self.NoiseG(z_g, z_n2)
-            ds_reg = torch.min(torch.tensor([(noise_sigma_2 - noise_sigma_1).mean() / (z_n2 - z_n1).mean(), 0])).to(self.dev)
+            ds_reg = torch.min(torch.tensor([torch.abs(noise_sigma_2 - noise_sigma_1).mean() / torch.abs(z_n2 - z_n1).mean(), 0])).to(self.dev)
 
             C_cost = -C_fake -0.02*ds_reg +0.5*nn.MSELoss()(fake, real)
 
