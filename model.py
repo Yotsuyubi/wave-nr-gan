@@ -15,7 +15,8 @@ class Block(nn.Module):
         super().__init__()
         self.block = nn.Sequential(
             nn.LeakyReLU(0.2),
-            nn.ConvTranspose1d(in_dim, out_dim, 25, padding=11, stride=4, output_padding=1),
+            nn.Upsample(scale_factor=4, mode='linear', align_corners=True),
+            nn.Conv1d(in_dim, out_dim, 25, padding=12, stride=1),
         )
 
     def forward(self, input):

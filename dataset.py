@@ -21,4 +21,4 @@ class SignalWithNoise(Dataset):
         return self.norm(noise + signal)
 
     def norm(self, x):
-        return (x - x.min()) / (x.max() - x.min())
+        return (x - x.min()) / (x.max() - x.min())*2 - 1
