@@ -209,7 +209,7 @@ class GAN(pl.LightningModule):
                                   grad_outputs=torch.ones(disc_interpolates.size()).to(self.dev),
                                   create_graph=True, retain_graph=True, only_inputs=True)[0]
 
-        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * 10
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * 100
         return gradient_penalty
 
     def configure_optimizers(self):
