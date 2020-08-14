@@ -149,7 +149,13 @@ class GAN(pl.LightningModule):
 
             D_cost = -D_real+D_fake+gradient_penalty
 
-            return { "loss": D_cost, "progress_bar": { "W_dis": D_real - D_fake } }
+            return {
+                "loss": D_cost,
+                "progress_bar": { "W_dis": D_real - D_fake },
+                "log": {
+                    "W_dis": D_real - D_fake
+                },
+            }
 
         # train Gen
         if optimizer_idx == 5:
