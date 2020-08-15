@@ -6,7 +6,23 @@ import numpy as np
 from dataset import SignalWithNoise
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
+from torchaudio.compliance.kaldi import resample_waveform
 
+
+class Resample(nn.Module):
+
+    def __init__(self, scale_factor):
+        super().__init__()
+        self.in_f = 44100
+        self.out_f = 44100 * scale_factor
+
+    def forward(self, x):
+        B, C, S = x.size()
+        batch = []
+        for b_i in range(B):
+            y = resample_waveform(x[b_i], self.in_f, self.out_f)
+            batch.append(y)
+        return torch.stack(batch, dim=0)
 
 
 class Block(nn.Module):
@@ -15,7 +31,7 @@ class Block(nn.Module):
         super().__init__()
         self.block = nn.Sequential(
             nn.LeakyReLU(0.2),
-            nn.Upsample(scale_factor=4, mode='linear', align_corners=True),
+            Resample(scale_factor=4),
             nn.Conv1d(in_dim, out_dim, 25, padding=12, stride=1),
         )
 
@@ -120,7 +136,8 @@ class GAN(pl.LightningModule):
             x = torch.rand([1, self.latent_length]).to(self.dev)
         if latent is None:
             latent = torch.rand([1, self.latent_length]).to(self.dev)
-        return self.NoiseG(x, latent)
+        sigma = self.NoiseG(x, latent)
+        return torch.randn([1, self.length]) * sigma
 
     def training_step(self, batch, batch_nb, optimizer_idx):
 
@@ -139,9 +156,9 @@ class GAN(pl.LightningModule):
             z_g = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             z_n = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             fake_signal = self.SigG(z_g)
-            noise_sigma = self.NoiseG(z_g, z_n)
-            noise_mu = torch.randn([1, self.length]).to(self.dev)
-            noise = (noise_sigma * noise_mu).reshape([real.size()[0], 1, -1])
+            noise_sigma = self.NoiseG(z_g, z_n).view(real.size()[0], 1, -1)
+            noise_mu = torch.randn([real.size()[0], 1, self.length]).to(self.dev)
+            noise = noise_sigma * noise_mu
             fake = fake_signal + noise
             D_fake = self.D(fake).mean()
 
@@ -168,9 +185,9 @@ class GAN(pl.LightningModule):
             z_g = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             z_n = torch.rand([real.size()[0], self.latent_length]).to(self.dev)
             fake_signal = self.SigG(z_g)
-            noise_sigma = self.NoiseG(z_g, z_n)
-            noise_mu = torch.randn([1, self.length]).to(self.dev)
-            noise = (noise_sigma * noise_mu).reshape([real.size()[0], 1, -1])
+            noise_sigma = self.NoiseG(z_g, z_n).view(real.size()[0], 1, -1)
+            noise_mu = torch.randn([real.size()[0], 1, self.length]).to(self.dev)
+            noise = noise_sigma * noise_mu
             fake = fake_signal + noise
             C_fake = self.D(fake).mean()
 

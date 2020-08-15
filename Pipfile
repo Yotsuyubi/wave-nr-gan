@@ -9,6 +9,7 @@ verify_ssl = true
 torch = "*"
 pytorch-lightning = "*"
 matplotlib = "*"
+torchaudio = "*"
 
 [requires]
 python_version = "3.8"
