@@ -6,31 +6,7 @@ import numpy as np
 from dataset import SignalWithNoise
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-
-
-
-class Block(nn.Module):
-
-    def __init__(self, in_dim, out_dim):
-        super().__init__()
-        self.block = nn.Sequential(
-            nn.LeakyReLU(0.2),
-            nn.ConvTranspose1d(in_dim, out_dim, 25, padding=11, stride=4, output_padding=1),
-        )
-
-    def forward(self, input):
-        output = self.block(input)
-        return output
-
-class PhaseShift(nn.Module):
-
-    def __init__(self, n):
-        super().__init__()
-        self.n = n
-
-    def forward(self, x):
-        n = torch.randint(-self.n, self.n, (1,))
-        return torch.roll(x, shifts=n.item(), dims=2)
+from layer import UpsampleBlock, DownsampleBlock
 
 
 class Discriminator(nn.Module):
@@ -38,19 +14,12 @@ class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv1d(1, 2*16, 26, padding=11, stride=4), # 1024
-            nn.LeakyReLU(0.2),
-            PhaseShift(2),
-            nn.Conv1d(2*16, 4*16, 26, padding=11, stride=4), # 256
-            nn.LeakyReLU(0.2),
-            PhaseShift(2),
-            nn.Conv1d(4*16, 8*16, 26, padding=11, stride=4), # 64
-            nn.LeakyReLU(0.2),
-            PhaseShift(2),
-            nn.Conv1d(8*16, 16*16, 26, padding=11, stride=4), # 16
-            nn.LeakyReLU(0.2),
+            DownsampleBlock(1, 2*4), # 1024
+            DownsampleBlock(2*4, 4*4), # 256
+            DownsampleBlock(4*4, 8*4), # 64
+            DownsampleBlock(8*4, 16*4),# 16
         )
-        self.fc = nn.Linear(256*16, 1)
+        self.fc = nn.Linear(256*4, 1)
 
     def forward(self, x):
         x = self.block(x)
@@ -63,10 +32,10 @@ class SignalGenerator(nn.Module):
         super().__init__()
         self.fc = nn.Linear(100, 256*16)
         self.block = nn.Sequential(
-            Block(16*16, 8*16),       # 64
-            Block(8*16, 4*16),        # 256
-            Block(4*16, 2*16),        # 1024
-            Block(2*16, 1*16),        # 4096
+            UpsampleBlock(16*16, 8*16),       # 64
+            UpsampleBlock(8*16, 4*16),        # 256
+            UpsampleBlock(4*16, 2*16),        # 1024
+            UpsampleBlock(2*16, 1*16),        # 4096
             nn.Conv1d(1*16, 1, 1)  # 4096
         )
 
